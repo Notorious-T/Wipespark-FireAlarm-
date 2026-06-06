@@ -1,0 +1,1313 @@
+index.html
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <script type="module">
+    
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+  import { getDatabase, ref, onValue, off, set, update } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCoT4mvSMehM5utSyir53agSswKzwoL_xQ",
+    authDomain: "wipespark-54bd6.firebaseapp.com",
+    databaseURL: "https://wipespark-54bd6-default-rtdb.asia-southeast1.firebasedatabase.app/",
+    projectId: "wipespark-54bd6",
+    storageBucket: "wipespark-54bd6.firebasestorage.app",
+    messagingSenderId: "99388475709",
+    appId: "1:99388475709:android:8566558d0e105cf63c5d54"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const auth = getAuth(app);
+
+
+  window.db = db;
+  window.ref = ref;
+  window.onValue = onValue;
+  window.off = off;
+  window.auth = auth;
+  window.update = update;
+
+// ------Reggister-------
+  window.handleRegister = async function() {
+   
+    const email = document.getElementById('inp-email')?.value.trim();
+    const pass = document.getElementById('inp-pass')?.value;
+    const btn = document.querySelector('#tab-register .btn-auth');
+
+    if (!email || !pass) {
+        alert("Please enter email and password (at least 6 characters)");
+        if(btn) window.shake(btn);
+        return;
+    }
+
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        alert("Registration successful!");
+
+        window.switchTab('pair'); 
+    }catch (e) {
+        console.error("Register Error:", e.code);
+        
+        if (e.code === 'auth/email-already-in-use') {
+            alert("This email is already in use. Please try a different email.");
+        } else if (e.code === 'auth/weak-password') {
+            alert("Password must be at least 6 characters long.");
+        } else if (e.code === 'auth/invalid-email') {
+            alert("Invalid email format.");
+        } else if (e.code === 'auth/network-request-failed') {
+            alert("Connection failed. Please check your internet connection.");
+        } else {
+            alert("An error occurred: " + e.message);
+        }
+    }
+};
+
+ // --- Login ---
+  window.doLogin = async (event) => {
+  if (event) event.preventDefault();
+
+  const emailEl = document.getElementById('inp-email');
+  const passEl = document.getElementById('inp-pass');
+  const cardEl = document.querySelector('.card'); 
+  const btn = document.querySelector('.btn-orange');
+  
+  if (typeof window.shake === 'function') window.shake(cardEl);
+
+  const email = emailEl.value.trim();
+  const pass = passEl.value;
+
+  if (!email || !pass) {
+    alert("Enter email and password");
+    return;
+  }
+
+  try {
+    btn.disabled = true;
+    btn.textContent = "Login...";
+
+    await signInWithEmailAndPassword(auth, email, pass);
+    console.log("Login success");
+  } catch (error) {
+    if (typeof window.shake === 'function') window.shake(cardEl);
+    console.error("Login Error:", error.code);
+    let message = "Email or password is incorrect";
+    if (error.code === 'auth/network-request-failed') message = "Please check your internet connection";
+    alert(message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Login";
+  }
+};
+
+//reset pass
+window.resetPassword = function() {
+    const user = auth.currentUser;
+    if (user && user.email) {
+        sendPasswordResetEmail(auth, user.email)
+            .then(() => {
+                alert("Check Email for password reset link " + user.email);
+            })
+            .catch((error) => {
+                console.error("Error reset password:", error);
+                alert("Error: " + error.message);
+            });
+    } else {
+        alert("User not found or please login again");
+    }
+};
+
+  // --- Login Status ---
+ onAuthStateChanged(auth, (user) => {
+    if (user) {
+        console.log("User logged in:", user.email);
+       
+        if (typeof window.show === 'function') {
+            window.show('screen-main');
+            window.hide('screen-login');
+            window.switchTab('pair');
+        }
+    } else {
+        console.log("No user logged in");
+        if (typeof window.show === 'function') {
+            window.show('screen-login');
+            window.hide('screen-main');
+        }
+    }if ("Notification" in window && Notification.permission !== "granted") {
+      Notification.requestPermission().then(permission => {
+        console.log("Permission:", permission);
+  });
+}
+    
+});
+
+  // --- Register ---
+  window.doRegister = async () => {
+    const email = document.getElementById('inp-email').value.trim();
+    const pass = document.getElementById('inp-pass').value;
+
+    if (!email || pass.length < 6) {
+        alert("Please enter email and password (at least 6 characters)");
+        return;
+    }
+
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        
+        await set(ref(db, 'users/' + userCredential.user.uid), {
+            email: email,
+            role: 'user',
+            createdAt: new Date().toISOString()
+        });
+        alert("Successfully Registered!");
+    } catch (error) {
+        console.error("Register Error:", error.code);
+        let msg = "An error occurred while registering";
+        if (error.code === 'auth/email-already-in-use') msg = "This email is already in use";
+        alert(msg);
+    }
+};
+
+  // --- Logout ---
+window.handleLogout = async function() {
+    if (confirm("Do you want to logout?")) {
+        try {
+            
+            if (typeof window.stopAllListeners === 'function') {
+                window.stopAllListeners();
+            }
+
+            await signOut(auth);
+            console.log("Logged out successfully");
+
+            window.hide('screen-main');
+            window.show('screen-login');
+            
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+
+            const passInput = document.getElementById('inp-pass');
+            if (passInput) passInput.value = '';
+
+        } catch (error) {
+            console.error("Logout Error:", error);
+            alert("Error: " + error.message);
+        }
+    }
+};
+
+  // --- Device Binding ---
+  window.bindDevice = async (deviceId) => {
+    const user = auth.currentUser;
+    if (!user) return alert("Please login first");
+    try {
+      await update(ref(db, 'devices/' + deviceId), {
+        owner: user.uid,
+        boundAt: new Date().toISOString()
+      });
+      alert("Successfully bound device!");
+      window.switchTab('status');
+    } catch (error) {
+      alert("You are not authorized to bind this device: " + error.message);
+    }
+  };
+
+  
+
+  window.authService = { signInWithEmailAndPassword };
+
+
+  // Firebase
+  window.updateDeviceSetting = async (type, el) => {
+    if (!currentDevice) {
+        alert("Please connect to a device before updating settings");
+        return;
+    }
+
+    const isEnabled = el.classList.toggle('on');
+    try {
+        const settingPath = `devices/${currentDevice}/settings`;
+        await window.update(window.ref(window.db, settingPath), {
+            [type]: isEnabled
+        });
+        console.log(`Updated ${type} to:`, isEnabled);
+    } catch (error) {
+        console.error("Update failed:", error);
+        el.classList.toggle('on');
+    }
+};
+
+window.connectDevice = function(deviceId) {
+    if (typeof window.stopAllListeners === 'function') {
+        window.stopAllListeners();
+    }
+    window.currentDevice = deviceId; 
+
+    const settingsRef = window.ref(window.db, `devices/${deviceId}/settings`);
+    window.onValue(settingsRef, (snapshot) => {
+        if (typeof window.updateSettingsUI === 'function') {
+            window.updateSettingsUI(snapshot.val());
+        }
+    });
+
+    const dbRef = window.ref(window.db, "devices/" + deviceId + "/sensor");
+    window.deviceListener = window.onValue(dbRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+        
+        if (typeof window.updateStatusUI === 'function') {
+            window.updateStatusUI(data);
+        }
+    });
+
+    window.switchTab('status');
+    console.log("Connected to device:", deviceId);
+};
+</script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self' data: gap: https://*.firebaseio.com https://*.googleapis.com https://*.firebasedatabase.app https://www.gstatic.com;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' 
+        https://www.gstatic.com 
+        https://*.googleapis.com 
+        https://*.firebaseapp.com 
+        https://*.firebasedatabase.app;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: https://i.imgur.com;
+    connect-src 'self' 
+        https://*.firebaseio.com 
+        https://*.firebasedatabase.app 
+        https://*.googleapis.com 
+        https://www.gstatic.com 
+        wss://*.firebasedatabase.app;
+">
+
+  <title>WipeSpark</title>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+  .device-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    margin-top: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .device-item:active {
+    background: rgba(255,255,255,0.05);
+  }
+
+  .device-name {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .device-status {
+    font-size: 12px;
+    color: var(--text-muted);
+  } 
+  
+  :root {
+      --bg-dark:      #0f1a35;
+      --bg-mid:       #1a2a50;
+      --card-bg:      rgba(30, 48, 90, 0.75);
+      --card-border:  rgba(100, 140, 220, 0.18);
+      --orange:       #f05a1a;
+      --orange-2:     #ff7c3a;
+      --blue-btn:     #2563eb;
+      --blue-btn-2:   #3b82f6;
+      --input-bg:     rgba(15, 26, 53, 0.7);
+      --input-border: rgba(100, 140, 220, 0.3);
+      --text-white:   #e8eeff;
+      --text-muted:   #8ba3d4;
+      --nav-bg:       #0a1228;
+      --nav-active:   rgba(37, 99, 235, 0.25);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      height: 100%; width: 100%;
+      font-family: 'Kanit', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-white);
+      overflow: hidden;
+    }
+
+    /* ── Background ── */
+    .bg {
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(37,99,235,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 90%, rgba(240,90,26,0.10) 0%, transparent 60%),
+        linear-gradient(160deg, #0f1a35 0%, #142040 50%, #0d1730 100%);
+    }
+    .bg::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+
+    /* ── Screens ── */
+    .screen {
+      position: fixed; inset: 0; z-index: 1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    .screen.hidden {
+      opacity: 0; pointer-events: none; transform: translateY(16px);
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 40px 32px 36px;
+      width: calc(100% - 48px);
+      max-width: 400px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07);
+    }
+
+    /* ── Logo ── */
+    .logo-wrap {
+      display: flex; justify-content: center; margin-bottom: 20px;
+    }
+    .logo-circle {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--orange-2) 0%, var(--orange) 100%);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 32px rgba(240,90,26,0.45), 0 4px 16px rgba(0,0,0,0.4);
+      animation: pulse-glow 3s ease-in-out infinite;
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 32px rgba(240,90,26,0.45), 0 4px 16px rgba(0,0,0,0.4); }
+      50%       { box-shadow: 0 0 48px rgba(240,90,26,0.70), 0 4px 20px rgba(0,0,0,0.4); }
+    }
+    .logo-circle svg { width: 36px; height: 36px; }
+
+    .app-title {
+      text-align: center;
+      font-size: 26px; font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+    .app-sub {
+      text-align: center;
+      font-size: 13px; font-weight: 300;
+      color: var(--text-muted);
+      margin-top: 4px; margin-bottom: 28px;
+    }
+
+    /* ── Form ── */
+    .field-label {
+      font-size: 14px; font-weight: 500;
+      color: var(--text-white);
+      margin-bottom: 8px; display: block;
+    }
+    .input-wrap {
+      position: relative; margin-bottom: 18px;
+    }
+    .input-wrap svg {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      width: 18px; height: 18px; opacity: 0.5;
+    }
+    .input-wrap input {
+      width: 100%; padding: 14px 16px 14px 42px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 12px;
+      color: var(--text-white);
+      font-family: 'Kanit', sans-serif;
+      font-size: 14px; font-weight: 300;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-appearance: none;
+    }
+    .input-wrap input::placeholder { color: rgba(139,163,212,0.5); }
+    .input-wrap input:focus {
+      border-color: var(--blue-btn);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.2);
+    }
+
+    /* ── Buttons ── */
+    .btn-orange {
+      width: 100%; padding: 15px;
+      background: linear-gradient(135deg, var(--orange-2) 0%, var(--orange) 100%);
+      border: none; border-radius: 12px;
+      color: #fff; font-family: 'Kanit', sans-serif;
+      font-size: 16px; font-weight: 600;
+      cursor: pointer; letter-spacing: 0.5px;
+      box-shadow: 0 4px 20px rgba(240,90,26,0.4);
+      transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+      -webkit-appearance: none;
+    }
+    .btn-orange:active {
+      transform: scale(0.97);
+      box-shadow: 0 2px 10px rgba(240,90,26,0.3);
+      filter: brightness(0.95);
+    }
+
+    .btn-blue {
+      width: 100%; padding: 16px;
+      background: linear-gradient(135deg, var(--blue-btn-2) 0%, var(--blue-btn) 100%);
+      border: none; border-radius: 12px;
+      color: #fff; font-family: 'Kanit', sans-serif;
+      font-size: 16px; font-weight: 600;
+      cursor: pointer; letter-spacing: 0.3px;
+      box-shadow: 0 4px 20px rgba(37,99,235,0.4);
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: transform 0.15s, box-shadow 0.15s;
+      -webkit-appearance: none;
+    }
+    .btn-blue:active {
+      transform: scale(0.97);
+      box-shadow: 0 2px 10px rgba(37,99,235,0.3);
+    }
+    .btn-blue svg { width: 20px; height: 20px; }
+
+    .register-row {
+      text-align: center; margin-top: 18px;
+      font-size: 13px; font-weight: 300;
+      color: var(--text-muted);
+    }
+    .register-row a {
+      color: #f5a623; font-weight: 500;
+      text-decoration: none;
+    }
+
+    .btn-auth {
+    width: 100%;
+    padding: 14px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.btn-auth:active {
+    transform: scale(0.98);
+    filter: brightness(0.9);
+}
+
+    .secure-note {
+      text-align: center; margin-top: 24px;
+      font-size: 11px; color: rgba(139,163,212,0.45);
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+    }
+    .secure-note svg { width: 12px; height: 12px; opacity: 0.5; }
+
+
+    #screen-main {
+      justify-content: space-between;
+      padding-bottom: 0;
+    }
+    .main-content {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+      width: 100%;
+    }
+
+
+    .bottom-nav {
+      width: 100%; background: var(--nav-bg);
+      border-top: 1px solid rgba(100,140,220,0.12);
+      display: flex; align-items: stretch;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 12px 4px 14px;
+      cursor: pointer; position: relative;
+      transition: background 0.2s;
+      border-radius: 12px;
+      margin: 4px;
+    }
+    .nav-item:active { background: rgba(255,255,255,0.05); }
+    .nav-item.active { background: var(--nav-active); }
+    .nav-item svg { width: 22px; height: 22px; margin-bottom: 4px; }
+    .nav-item span {
+      font-size: 10.5px; font-weight: 400;
+      color: var(--text-muted); white-space: nowrap;
+    }
+    .nav-item.active span { color: var(--blue-btn-2); }
+    .nav-item.active svg path,
+    .nav-item.active svg circle,
+    .nav-item.active svg rect,
+    .nav-item.active svg polyline,
+    .nav-item.active svg line { stroke: var(--blue-btn-2); }
+    .nav-item.logout span { color: rgba(139,163,212,0.6); }
+    .nav-item.logout svg path { stroke: rgba(139,163,212,0.6); }
+
+
+    .scan-ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 1.5px solid rgba(37,99,235,0.3);
+      animation: expand 2.5s ease-out infinite;
+      pointer-events: none;
+    }
+    .scan-ring:nth-child(1) { width: 100px; height: 100px; animation-delay: 0s; }
+    .scan-ring:nth-child(2) { width: 140px; height: 140px; animation-delay: 0.6s; }
+    .scan-ring:nth-child(3) { width: 180px; height: 180px; animation-delay: 1.2s; }
+    @keyframes expand {
+      0%   { transform: scale(0.6); opacity: 0.7; }
+      100% { transform: scale(1);   opacity: 0; }
+    }
+
+    /* ── Status screen ── */
+    .status-list { margin-top: 16px; }
+    .status-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 12px; margin-bottom: 10px;
+    }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .status-dot.green  { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.6); }
+    .status-dot.red    { background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.6); }
+    .status-dot.yellow { background: #eab308; box-shadow: 0 0 8px rgba(234,179,8,0.6); }
+    .status-name { font-size: 14px; font-weight: 500; flex: 1; }
+    .status-val  { font-size: 12px; color: var(--text-muted); }
+
+    /* ── Settings ── */
+    .settings-section { margin-bottom: 20px; }
+    .settings-title {
+      font-size: 12px; font-weight: 500;
+      color: var(--text-muted); letter-spacing: 1px;
+      text-transform: uppercase; margin-bottom: 10px;
+    }
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 12px; margin-bottom: 8px;
+    }
+    .setting-row span { font-size: 14px; font-weight: 400; }
+    .toggle {
+      width: 44px; height: 24px; border-radius: 12px;
+      background: rgba(100,140,220,0.2);
+      position: relative; cursor: pointer; transition: background 0.2s;
+    }
+    .toggle.on { background: var(--blue-btn); }
+    .toggle::after {
+      content: ''; position: absolute;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; top: 3px; left: 3px;
+      transition: left 0.2s;
+    }
+    .toggle.on::after { left: 23px; }
+
+    /* Scrollable inner card content */
+    .scroll-inner { overflow-y: auto; max-height: calc(100vh - 180px); }
+    .scroll-inner::-webkit-scrollbar { display: none; }
+
+	  /* ── Chart Tab ── */
+  .chart-btn {
+    flex: 1; padding: 8px 4px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-family: 'Kanit', sans-serif;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .chart-btn.active {
+    background: var(--blue-btn);
+    border-color: var(--blue-btn);
+    color: #fff;
+    box-shadow: 0 2px 12px rgba(37,99,235,0.4);
+  }
+  .stat-box {
+    flex: 1; background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 10px; padding: 8px 4px;
+    text-align: center;
+  }
+  .stat-label { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; }
+  .stat-val   { font-size: 14px; font-weight: 600; color: var(--text-white); }
+
+  .hidden {
+    display: none !important;
+  }
+  </style>
+</head>
+<body>
+<div class="bg"></div>
+
+<!-- ══════════════ LOGIN ══════════════ -->
+<div class="screen" id="screen-login">
+  <div class="card">
+    <div class="logo-wrap">
+      <div class="logo-circle">
+        <!-- Flame icon -->
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C12 2 7 7.5 7 13C7 15.8 9.2 18 12 18C14.8 18 17 15.8 17 13C17 7.5 12 2 12 2Z" fill="white" opacity="0.9"/>
+          <path d="M12 8C12 8 9.5 11 9.5 13.5C9.5 14.88 10.62 16 12 16C13.38 16 14.5 14.88 14.5 13.5C14.5 11 12 8 12 8Z" fill="rgba(255,255,255,0.4)"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="app-title">WipeSpark</div>
+    <div class="app-sub">Automatic Smoke Detection Device</div>
+
+    <form id="login-form" onsubmit="return false;">
+    <label class="field-label">Email</label>
+<div class="input-wrap">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <rect x="2" y="4" width="20" height="16" rx="2"/>
+    <path d="M2 7l10 7 10-7"/>
+  </svg>
+  <input type="email" id="inp-email" placeholder="your@email.com" autocomplete="email" required />
+</div>
+
+<label class="field-label">Password</label>
+<div class="input-wrap">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <rect x="3" y="11" width="18" height="11" rx="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+  <input type="password" id="inp-pass" placeholder="••••••••" autocomplete="current-password" required />
+</div>
+    
+
+</form>
+
+    <button class="btn-orange" onclick="window.doLogin(event)">Login</button>
+
+    <button class="btn-auth" onclick="handleRegister()">Register</button>
+
+    <div class="secure-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      Your security is our priority
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<div class="screen hidden" id="screen-main">
+  <!-- Tab content area -->
+  <div class="main-content">
+
+    <div id="tab-pair" class="card" style="text-align:center;">
+      <div class="logo-wrap" style="position:relative;justify-content:center;align-items:center;height:100px;">
+        <div class="scan-ring"></div>
+        <div class="scan-ring"></div>
+        <div class="scan-ring"></div>
+        <div class="logo-circle" style="position:relative;z-index:1;">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C12 2 7 7.5 7 13C7 15.8 9.2 18 12 18C14.8 18 17 15.8 17 13C17 7.5 12 2 12 2Z" fill="white" opacity="0.9"/>
+            <path d="M12 8C12 8 9.5 11 9.5 13.5C9.5 14.88 10.62 16 12 16C13.38 16 14.5 14.88 14.5 13.5C14.5 11 12 8 12 8Z" fill="rgba(255,255,255,0.4)"/>
+          </svg>
+        </div>
+      </div>
+      <div class="app-title" style="margin-top:8px;">WipeSpark</div>
+      <div class="app-sub">Automatic Smoke Detection Device</div>
+      <button class="btn-blue" onclick="scanDevices()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+          <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+          <circle cx="12" cy="20" r="1" fill="white"/>
+        </svg>
+        Scanning Devices
+      </button>
+      <p id="scan-status" style="margin-top:14px;font-size:12px;color:var(--text-muted);min-height:18px;"></p>
+      <div id="device-list" style="margin-top:16px;"></div>
+    </div>
+
+    <!-- Status -->
+<div id="tab-status" class="card hidden">
+  <div class="app-title" style="font-size:18px;margin-bottom:4px;">Device Status</div>
+  <div class="app-sub" id="last-update" style="margin-bottom:0;">Last Updated: -</div>
+
+  <div class="status-list scroll-inner" id="status-list"></div>
+</div>
+
+    <div id="tab-chart" class="card hidden" style="padding:20px 16px;">
+      <div class="app-title" style="font-size:18px;margin-bottom:4px;">Backward Graph</div>
+      <div class="app-sub" id="chart-device-name" style="margin-bottom:12px;">Connect a device to view the graph</div>
+
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="chart-btn active" id="btn-gas" onclick="selectMetric('gas')">Gas</button>
+        <button class="chart-btn" id="btn-temp" onclick="selectMetric('temp')">Temp</button>
+        <button class="chart-btn" id="btn-hum" onclick="selectMetric('humidity')">Humidity</button>
+      </div>
+
+      <div id="chart-stats" style="display:flex;gap:8px;margin-bottom:14px;">
+        <div class="stat-box"><div class="stat-label">Minimum</div><div class="stat-val" id="stat-min">-</div></div>
+        <div class="stat-box"><div class="stat-label">Average</div><div class="stat-val" id="stat-avg">-</div></div>
+        <div class="stat-box"><div class="stat-label">Maximum</div><div class="stat-val" id="stat-max">-</div></div>
+        <div class="stat-box"><div class="stat-label">Latest</div><div class="stat-val" id="stat-last">-</div></div>
+      </div>
+
+      <div style="position:relative;width:100%;background:rgba(15,26,53,0.7);border:1px solid rgba(100,140,220,0.2);border-radius:12px;padding:12px 8px 8px;">
+        <canvas id="myChart" style="width:100%;display:block;"></canvas>
+        <div id="chart-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;">No data available</div>
+      </div>
+      <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text-muted);">Latest • Auto Update</div>
+    </div>
+
+    <!-- Settings-->
+    <div id="tab-settings" class="card hidden">
+    <div class="app-title" style="font-size:18px;margin-bottom:16px;">Settings</div>
+    <div class="scroll-inner">
+        
+        <div class="settings-section">
+            <div class="settings-title">Notifications</div>
+            <div class="setting-row">
+                <span>App Notifications</span>
+                <div id="toggle-notifications" class="toggle on" onclick="window.toggleDeviceSetting(this, 'noti_enabled')"></div>
+            </div>
+            <div class="setting-row">
+                <span>Buzzer Sound</span>
+                <div id="toggle-buzzer" class="toggle on" onclick="window.toggleDeviceSetting(this, 'sound_enabled')"></div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-title">Account</div>
+
+            <div class="setting-row" style="cursor:pointer;" onclick="window.resetPassword()">
+                <span>Change Password</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                    <path d="M9 18l6-6-6-6"/>
+                </svg>
+            </div>
+
+            <div class="setting-row" style="cursor:pointer; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;" onclick="window.handleLogout()">
+                <span style="color: #ff4d4d; font-weight: 600;">Logout</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff4d4d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+            </div>
+        </div>
+
+    </div> </div>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav">
+    <div class="nav-item active" id="nav-pair" onclick="switchTab('pair')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.8">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+        <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+        <circle cx="12" cy="20" r="1" fill="var(--text-muted)" stroke="none"/>
+      </svg>
+      <span>Pair Device</span>
+    </div>
+    <div class="nav-item" id="nav-status" onclick="switchTab('status')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.8">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      <span>Status</span>
+    </div>
+    <div class="nav-item" id="nav-chart" onclick="switchTab('chart')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.8">
+        <polyline points="3 17 7 13 11 15 15 9 21 7"/>
+        <line x1="3" y1="21" x2="21" y2="21"/>
+      </svg>
+      <span>Chart</span>
+    </div>
+    <div class="nav-item" id="nav-settings" onclick="switchTab('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.8">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      <span>Settings</span>
+    </div>
+  </nav>
+</div>
+
+<script>
+if (window.Notification && Notification.permission !== "granted") {
+    Notification.requestPermission().then(permission => {
+        console.log("Notification permission:", permission);
+    });
+}
+let currentDevice = null;
+let deviceListener = null;
+let scanListener = null;
+let alertActive = false;
+const alertSound = new Audio("audio/kimAlert.mp3");
+alertSound.loop = true;
+// ─────────────────────────────
+// CHART DATA HISTORY
+// ─────────────────────────────
+const MAX_POINTS = 50;
+const history = { gas: [], temp: [], humidity: [], labels: [] };
+let currentMetric = 'gas';
+let chartCtx = null;
+let chartAnimId = null;
+
+const METRIC_CONFIG = {
+  gas:      { label: 'Gas',         color: '#f05a1a', unit: '',   warn: 2800, danger: 3300 },
+  temp:     { label: 'Temperature', color: '#3b82f6', unit: '°C', warn: 45,   danger: 60  },
+  humidity: { label: 'Humidity',    color: '#22c55e', unit: '%',  warn: null, danger: null },
+};
+
+function pushHistory(data) {
+  const now = new Date();
+  const label = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  history.labels.push(label);
+  history.gas.push(data.gas ?? 0);
+  history.temp.push(data.temp ?? 0);
+  history.humidity.push(data.humidity ?? 0);
+
+  if (history.labels.length > MAX_POINTS) {
+    history.labels.shift();
+    history.gas.shift();
+    history.temp.shift();
+    history.humidity.shift();
+  }
+
+  drawChart();
+}
+
+function selectMetric(m) {
+  currentMetric = m;
+  document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + (m === 'humidity' ? 'hum' : m)).classList.add('active');
+  drawChart();
+}
+
+function drawChart() {
+  const canvas = document.getElementById('myChart');
+  const empty  = document.getElementById('chart-empty');
+  if (!canvas) return;
+
+  const vals = history[currentMetric];
+  const cfg  = METRIC_CONFIG[currentMetric];
+
+  if (vals.length === 0) {
+    empty.style.display = 'flex';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // size canvas
+  const dpr = window.devicePixelRatio || 1;
+  const W   = canvas.parentElement.clientWidth - 16;
+  const H   = 180;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const PAD = { top: 16, right: 10, bottom: 28, left: 40 };
+  const cW  = W - PAD.left - PAD.right;
+  const cH  = H - PAD.top  - PAD.bottom;
+
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const range = (maxV - minV) || 1;
+
+  const xStep = cW / Math.max(vals.length - 1, 1);
+
+  function xAt(i) { return PAD.left + i * xStep; }
+  function yAt(v) { return PAD.top + cH - ((v - minV) / range) * cH; }
+
+  // grid lines
+  ctx.strokeStyle = 'rgba(100,140,220,0.1)';
+  ctx.lineWidth = 1;
+  for (let g = 0; g <= 4; g++) {
+    const y = PAD.top + (cH / 4) * g;
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke();
+    const gVal = maxV - ((maxV - minV) / 4) * g;
+    ctx.fillStyle = 'rgba(139,163,212,0.6)';
+    ctx.font = '9px Kanit, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(gVal.toFixed(gVal < 10 ? 1 : 0), PAD.left - 4, y + 3);
+  }
+
+  // danger / warn bands
+  if (cfg.danger && cfg.danger >= minV && cfg.danger <= maxV * 1.2) {
+    const yD = yAt(cfg.danger);
+    ctx.strokeStyle = 'rgba(239,68,68,0.4)';
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(PAD.left, yD); ctx.lineTo(PAD.left + cW, yD); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // gradient fill
+  const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH);
+  grad.addColorStop(0, cfg.color + 'aa');
+  grad.addColorStop(1, cfg.color + '00');
+
+  ctx.beginPath();
+  ctx.moveTo(xAt(0), yAt(vals[0]));
+  for (let i = 1; i < vals.length; i++) {
+    const x0 = xAt(i - 1), y0 = yAt(vals[i - 1]);
+    const x1 = xAt(i),     y1 = yAt(vals[i]);
+    const mx  = (x0 + x1) / 2;
+    ctx.bezierCurveTo(mx, y0, mx, y1, x1, y1);
+  }
+  ctx.lineTo(xAt(vals.length - 1), PAD.top + cH);
+  ctx.lineTo(xAt(0), PAD.top + cH);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // line
+  ctx.beginPath();
+  ctx.moveTo(xAt(0), yAt(vals[0]));
+  for (let i = 1; i < vals.length; i++) {
+    const x0 = xAt(i - 1), y0 = yAt(vals[i - 1]);
+    const x1 = xAt(i),     y1 = yAt(vals[i]);
+    const mx  = (x0 + x1) / 2;
+    ctx.bezierCurveTo(mx, y0, mx, y1, x1, y1);
+  }
+  ctx.strokeStyle = cfg.color;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // last dot
+  const lx = xAt(vals.length - 1), ly = yAt(vals[vals.length - 1]);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+  ctx.fillStyle = cfg.color;
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // x-axis labels (every ~10 pts)
+  ctx.fillStyle = 'rgba(139,163,212,0.5)';
+  ctx.font = '8px Kanit, sans-serif';
+  ctx.textAlign = 'center';
+  const step = Math.max(1, Math.floor(vals.length / 5));
+  for (let i = 0; i < vals.length; i += step) {
+    ctx.fillText(history.labels[i], xAt(i), H - PAD.bottom + 12);
+  }
+
+  // stats
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  document.getElementById('stat-min').textContent  = Math.min(...vals).toFixed(1) + cfg.unit;
+  document.getElementById('stat-avg').textContent  = avg.toFixed(1) + cfg.unit;
+  document.getElementById('stat-max').textContent  = Math.max(...vals).toFixed(1) + cfg.unit;
+  document.getElementById('stat-last').textContent = vals[vals.length - 1].toFixed(1) + cfg.unit;
+}
+
+// ─────────────────────────────
+// FIREBASE CONTROL
+// ─────────────────────────────
+window.stopAllListeners = function() {
+    if (window.deviceListener) {
+        window.off(window.ref(window.db, "devices/" + window.currentDevice + "/sensor"));
+        window.deviceListener = null;
+    }
+};
+
+  if (scanListener) {
+    const refPath = window.ref(window.db, "devices");
+    window.off(refPath, scanListener);
+  }
+
+  deviceListener = null;
+  scanListener = null;
+
+
+
+function scanDevices() {
+  const st  = document.getElementById('scan-status');
+  const btn = document.querySelector('.btn-blue');
+  const list = document.getElementById('device-list');
+
+
+  stopAllListeners();
+
+  btn.disabled = true;
+  st.textContent = 'Scanning Devices...';
+  list.innerHTML = "";
+
+  const dbRef = window.ref(window.db, "devices");
+
+  scanListener = window.onValue(dbRef, (snapshot) => {
+    const data = snapshot.val();
+    list.innerHTML = "";
+
+    if (!data) {
+        st.textContent = "No devices found in the database";
+        btn.disabled = false;
+        return;
+    }
+
+    Object.keys(data).forEach(key => {
+        const d = data[key];
+        const name = d.name || key; 
+        
+        const div = document.createElement("div");
+        div.className = "device-item";
+        div.innerHTML = `
+            <span class="device-name">${name}</span>
+            <span class="device-status">Ready to Connect</span>
+        `;
+        div.onclick = () => connectDevice(key);
+        list.appendChild(div);
+    });
+
+    btn.disabled = false;
+    st.textContent = "Found Devices ✓";
+  });
+}
+
+// ─────────────────────────────
+// CONNECT DEVICE
+// ─────────────────────────────
+
+let settings = {
+    sound_enabled: false,
+    noti_enabled: false
+};
+
+function connectDevice(deviceId) {
+    stopAllListeners();
+    currentDevice = deviceId; 
+
+
+    const settingsRef = window.ref(window.db, `devices/${deviceId}/settings`);
+    
+    window.onValue(settingsRef, (snapshot) => {
+        updateSettingsUI(snapshot.val());
+    });
+
+    const dbRef = window.ref(window.db, "devices/" + deviceId + "/sensor");
+    deviceListener = window.onValue(dbRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+        updateStatusUI(data);
+    });
+    switchTab('status');
+}
+
+function stopAlertSound() {
+    alertSound.pause();
+    alertSound.currentTime = 0;
+    alertActive = false;
+}
+function playAlertSound() {
+    alertSound.play().catch(err => console.warn("Playback blocked:", err));
+}
+
+
+let lastAlertTime = 0;
+
+function triggerGasAlert(gas) {
+    const now = Date.now();
+    const cooldown = 15000;
+
+    if (gas > 3000 && settings.sound_enabled) {
+        if (!alertActive) {
+            alertActive = true;
+            playAlertSound();
+        }
+    } else if (alertActive) {
+        stopAlertSound();
+    }
+
+    if (gas > 3000 && settings.noti_enabled) {
+        if (now - lastAlertTime > cooldown) {
+            lastAlertTime = now;
+
+            if (window.cordova && cordova.plugins && cordova.plugins.notification && cordova.plugins.notification.local) {
+              cordova.plugins.notification.local.schedule({
+                id: 1,
+                title: "Dangerous Gas Detected! (WipeSpark)",
+                text: "Abnormal Gas Level: " + gas,
+                foreground: true,
+                priority: 2,
+                vibrate: true
+              });
+            } else if (Notification.permission === "granted") {
+
+                new Notification("🚨 WipeSpark Alert", {
+                    body: "DANGEROUS GAS LEVEL: " + gas,
+                    icon: "https://i.imgur.com/8QfXQZP.png"
+                });
+            }
+        }
+    }
+}
+
+// ─────────────────────────────
+// UPDATE UI
+// ─────────────────────────────
+
+function updateSettingsUI(data) {
+    if (!data) return;
+    
+    settings.sound_enabled = data.sound_enabled;
+    settings.noti_enabled = data.noti_enabled;
+
+    const soundBtn = document.querySelector('[onclick*="sound_enabled"]');
+    const notiBtn = document.querySelector('[onclick*="noti_enabled"]');
+
+    if (soundBtn) {
+        data.sound_enabled ? soundBtn.classList.add('on') : soundBtn.classList.remove('on');
+    }
+    if (notiBtn) {
+        data.noti_enabled ? notiBtn.classList.add('on') : notiBtn.classList.remove('on');
+    }
+};
+function updateStatusUI(data) {
+  const list = document.getElementById("status-list");
+  const timeEl = document.getElementById("last-update");
+  if (!list) return;
+
+  const gas = data.gas ?? 0;
+  const temp = data.temp ?? 0;
+  const humidity = data.humidity ?? 0;
+
+  triggerGasAlert(gas);
+
+  let gasStatus = "Normal";
+  let gasColor = "green";
+
+  if (gas > 3000) {
+    gasStatus = " DANGER";
+    gasColor = "red";
+  } else if (gas > 2800) {
+    gasStatus = " UNSAFE";
+    gasColor = "yellow";
+  }
+
+  list.innerHTML = `
+    <div class="status-item">
+      <div class="status-dot ${gasColor}"></div>
+      <span class="status-name">Gas</span>
+      <span class="status-val">${gas} (${gasStatus})</span>
+    </div>
+
+    <div class="status-item">
+      <div class="status-dot green"></div>
+      <span class="status-name">Temperature</span>
+      <span class="status-val">${temp} °C</span>
+    </div>
+
+    <div class="status-item">
+      <div class="status-dot green"></div>
+      <span class="status-name">Humidity</span>
+      <span class="status-val">${humidity} %</span>
+    </div>
+  `;
+
+  const now = new Date();
+  timeEl.textContent = "Last Updated: " + now.toLocaleTimeString();
+
+
+  pushHistory(data);
+
+  const chartName = document.getElementById('chart-device-name');
+  if (chartName) chartName.textContent = currentDevice ? 'Device: ' + currentDevice : '';
+}
+
+//UI
+window.toggleDeviceSetting = async function(el, settingPath) {
+    const isEnabled = el.classList.toggle('on');
+    const deviceId = window.currentDevice;
+    if (!deviceId) {
+        console.error("No device selected!");
+        el.classList.toggle('on');
+        alert("Please select a device before setting preferences");
+        return;
+    }
+
+    try {
+        const settingsRef = window.ref(window.db, `devices/${deviceId}/settings`);
+        await window.update(settingsRef, {
+            [settingPath]: isEnabled
+        });
+        console.log(`Update ${settingPath} to:`, isEnabled);
+        if (settingPath === 'noti_enabled' && window.FirebasePlugin) {
+            if (isEnabled) {
+                window.FirebasePlugin.subscribeToTopic("smoke_alarm");
+            } else {
+                window.FirebasePlugin.unsubscribeFromTopic("smoke_alarm");
+            }
+        }
+    } catch (e) {
+        console.error("Update failed:", e);
+        el.classList.toggle('on');
+    }
+};
+
+window.show = function(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('hidden');
+};
+
+window.hide = function(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+};
+
+window.shake = function(el) {
+    let i = 0;
+    const iv = setInterval(() => {
+        el.style.transform = i % 2 === 0 ? 'translateX(-6px)' : 'translateX(6px)';
+        if (++i > 5) {
+            clearInterval(iv);
+            el.style.transform = 'translateX(0)';
+        }
+    }, 60);
+};
+
+window.switchTab = function(tabId) {
+    window.hide('tab-pair');
+    window.hide('tab-status');
+    window.hide('tab-chart');
+    window.hide('tab-settings');
+    
+    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+    window.show('tab-' + tabId);
+    
+    const activeNav = document.getElementById('nav-' + tabId);
+    if (activeNav) activeNav.classList.add('active');
+
+    if (tabId === 'chart') {
+        requestAnimationFrame(() => drawChart());
+    }
+};
+
+window.switchTab('pair');
+</script>
+</body>
+</html>
